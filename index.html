@@ -16,154 +16,54 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
-        // API Configuration - CONNECTED TO PYTHON BACKEND
+        // Mock API (Replace with actual backend calls)
         const API_URL = 'http://localhost:5000/api';
 
-        // API Helper Functions (Kept as is for backend interaction)
-        const api = {
-            // ... (All API functions from original code) ...
-            login: async (username, password) => {
-                const response = await fetch(`${API_URL}/auth/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ username, password })
-                });
-                return await response.json();
-            },
-            logout: async () => {
-                const response = await fetch(`${API_URL}/auth/logout`, {
-                    method: 'POST',
-                    credentials: 'include'
-                });
-                return await response.json();
-            },
-            checkSession: async () => {
-                const response = await fetch(`${API_URL}/auth/session`, {
-                    credentials: 'include'
-                });
-                return await response.json();
-            },
-            // Products
-            getProducts: async (category = '', search = '') => {
-                const params = new URLSearchParams();
-                if (category) params.append('category', category);
-                if (search) params.append('search', search);
-                const response = await fetch(`${API_URL}/products?${params}`, {
-                    credentials: 'include'
-                });
-                return await response.json();
-            },
-            addProduct: async (productData) => {
-                const response = await fetch(`${API_URL}/products`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify(productData)
-                });
-                return await response.json();
-            },
-            updateProduct: async (id, productData) => {
-                const response = await fetch(`${API_URL}/products/${id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify(productData)
-                });
-                return await response.json();
-            },
-            deleteProduct: async (id) => {
-                const response = await fetch(`${API_URL}/products/${id}`, {
-                    method: 'DELETE',
-                    credentials: 'include'
-                });
-                return await response.json();
-            },
-            getCategories: async () => {
-                const response = await fetch(`${API_URL}/products/categories`, {
-                    credentials: 'include'
-                });
-                return await response.json();
-            },
-            getLowStock: async () => {
-                const response = await fetch(`${API_URL}/products/low-stock`, {
-                    credentials: 'include'
-                });
-                return await response.json();
-            },
-            // Customers
-            getCustomers: async () => {
-                const response = await fetch(`${API_URL}/customers`, {
-                    credentials: 'include'
-                });
-                return await response.json();
-            },
-            addCustomer: async (customerData) => {
-                const response = await fetch(`${API_URL}/customers`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify(customerData)
-                });
-                return await response.json();
-            },
-            getCustomer: async (id) => {
-                const response = await fetch(`${API_URL}/customers/${id}`, {
-                    credentials: 'include'
-                });
-                return await response.json();
-            },
-            // Transactions
-            addBorrow: async (transactionData) => {
-                const response = await fetch(`${API_URL}/transactions/borrow`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify(transactionData)
-                });
-                return await response.json();
-            },
-            addRepayment: async (transactionData) => {
-                const response = await fetch(`${API_URL}/transactions/repay`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify(transactionData)
-                });
-                return await response.json();
-            },
-            // Analytics
-            getDashboard: async () => {
-                const response = await fetch(`${API_URL}/analytics/dashboard`, {
-                    credentials: 'include'
-                });
-                return await response.json();
-            }
+        // Mock data for demo
+        const mockData = {
+            user: null,
+            products: [
+                { id: 1, name: 'Rice (1kg)', category: 'Grains', price: 60, stock: 100, low_stock_threshold: 20, unit: 'kg' },
+                { id: 2, name: 'Wheat Flour (1kg)', category: 'Grains', price: 45, stock: 80, low_stock_threshold: 15, unit: 'kg' },
+                { id: 3, name: 'Milk (1L)', category: 'Dairy', price: 55, stock: 15, low_stock_threshold: 20, unit: 'liter' },
+                { id: 4, name: 'Paneer (200g)', category: 'Dairy', price: 80, stock: 25, low_stock_threshold: 10, unit: 'pack' },
+                { id: 5, name: 'Tomatoes (1kg)', category: 'Vegetables', price: 40, stock: 50, low_stock_threshold: 15, unit: 'kg' },
+                { id: 6, name: 'Onions (1kg)', category: 'Vegetables', price: 35, stock: 60, low_stock_threshold: 20, unit: 'kg' },
+                { id: 7, name: 'Potatoes (1kg)', category: 'Vegetables', price: 30, stock: 70, low_stock_threshold: 25, unit: 'kg' },
+                { id: 8, name: 'Bread', category: 'Bakery', price: 25, stock: 40, low_stock_threshold: 15, unit: 'piece' },
+                { id: 9, name: 'Biscuits', category: 'Snacks', price: 20, stock: 100, low_stock_threshold: 30, unit: 'pack' },
+                { id: 10, name: 'Tea (250g)', category: 'Beverages', price: 150, stock: 50, low_stock_threshold: 10, unit: 'pack' },
+            ],
+            customers: [
+                { id: 1, name: 'Rajesh Kumar', phone: '9876543210', email: 'rajesh@email.com', total_borrowed: 1500, total_repaid: 800 },
+                { id: 2, name: 'Priya Sharma', phone: '9876543211', email: 'priya@email.com', total_borrowed: 2000, total_repaid: 2000 },
+                { id: 3, name: 'Amit Patel', phone: '9876543212', email: 'amit@email.com', total_borrowed: 500, total_repaid: 0 },
+            ],
+            transactions: [
+                { id: 1, customer_id: 1, transaction_type: 'borrow', amount: 500, description: 'Monthly groceries', created_at: '2025-09-25' },
+                { id: 2, customer_id: 1, transaction_type: 'repay', amount: 300, description: 'Partial payment', created_at: '2025-09-28' },
+                { id: 3, customer_id: 3, transaction_type: 'borrow', amount: 500, description: 'Weekly shopping', created_at: '2025-09-29' },
+            ]
         };
 
-        // Login Component (Kept as is)
+        // Login Component
         function Login({ onLogin }) {
             const [username, setUsername] = useState('');
             const [password, setPassword] = useState('');
             const [error, setError] = useState('');
-            const [loading, setLoading] = useState(false);
 
-            const handleLogin = async (e) => {
+            const handleLogin = (e) => {
                 e.preventDefault();
-                setLoading(true);
-                setError('');
-                
-                try {
-                    const result = await api.login(username, password);
-                    if (result.success) {
-                        onLogin(result.user);
-                    } else {
-                        setError(result.message || 'Invalid credentials');
-                    }
-                } catch (err) {
-                    setError('Connection error. Make sure backend is running on http://localhost:5000');
-                } finally {
-                    setLoading(false);
+                // Mock login
+                if ((username === 'owner' && password === 'owner123') || 
+                    (username === 'staff1' && password === 'staff123')) {
+                    onLogin({
+                        username,
+                        role: username === 'owner' ? 'owner' : 'staff',
+                        name: username === 'owner' ? 'Store Owner' : 'John Staff'
+                    });
+                } else {
+                    setError('Invalid credentials');
                 }
             };
 
@@ -185,7 +85,6 @@
                                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     placeholder="Enter username"
                                     required
-                                    disabled={loading}
                                 />
                             </div>
                             <div>
@@ -197,7 +96,6 @@
                                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                     placeholder="Enter password"
                                     required
-                                    disabled={loading}
                                 />
                             </div>
                             {error && (
@@ -207,10 +105,9 @@
                             )}
                             <button
                                 type="submit"
-                                disabled={loading}
-                                className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-gray-400"
+                                className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
                             >
-                                {loading ? 'Logging in...' : 'Login'}
+                                Login
                             </button>
                         </form>
                         <div className="mt-6 text-sm text-gray-600 text-center">
@@ -223,33 +120,11 @@
             );
         }
 
-        // Dashboard Component (Kept as is)
-        function Dashboard() {
-            const [dashboardData, setDashboardData] = useState(null);
-            const [loading, setLoading] = useState(true);
-
-            useEffect(() => {
-                loadDashboard();
-            }, []);
-
-            const loadDashboard = async () => {
-                try {
-                    const data = await api.getDashboard();
-                    setDashboardData(data);
-                } catch (err) {
-                    console.error('Error loading dashboard:', err);
-                } finally {
-                    setLoading(false);
-                }
-            };
-
-            if (loading) {
-                return <div className="text-center py-8">Loading dashboard...</div>;
-            }
-
-            if (!dashboardData) {
-                return <div className="text-center py-8 text-red-600">Error loading dashboard</div>;
-            }
+        // Dashboard Component
+        function Dashboard({ products, customers, transactions }) {
+            const todaySales = 5420;
+            const outstandingDebt = customers.reduce((sum, c) => sum + (c.total_borrowed - c.total_repaid), 0);
+            const lowStockCount = products.filter(p => p.stock <= p.low_stock_threshold).length;
 
             return (
                 <div className="space-y-6">
@@ -260,7 +135,7 @@
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-blue-100 text-sm">Today's Sales</p>
-                                    <p className="text-3xl font-bold mt-2">₹{dashboardData.today_sales}</p>
+                                    <p className="text-3xl font-bold mt-2">₹{todaySales}</p>
                                 </div>
                                 <i className="fas fa-chart-line text-4xl text-blue-200"></i>
                             </div>
@@ -270,7 +145,7 @@
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-red-100 text-sm">Outstanding Debt</p>
-                                    <p className="text-3xl font-bold mt-2">₹{dashboardData.outstanding_debt}</p>
+                                    <p className="text-3xl font-bold mt-2">₹{outstandingDebt}</p>
                                 </div>
                                 <i className="fas fa-exclamation-triangle text-4xl text-red-200"></i>
                             </div>
@@ -280,7 +155,7 @@
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-yellow-100 text-sm">Low Stock Items</p>
-                                    <p className="text-3xl font-bold mt-2">{dashboardData.low_stock_count}</p>
+                                    <p className="text-3xl font-bold mt-2">{lowStockCount}</p>
                                 </div>
                                 <i className="fas fa-box-open text-4xl text-yellow-200"></i>
                             </div>
@@ -290,267 +165,460 @@
                             <div className="flex items-center justify-between">
                                 <div>
                                     <p className="text-green-100 text-sm">Total Customers</p>
-                                    <p className="text-3xl font-bold mt-2">{dashboardData.customer_count}</p>
+                                    <p className="text-3xl font-bold mt-2">{customers.length}</p>
                                 </div>
                                 <i className="fas fa-users text-4xl text-green-200"></i>
                             </div>
                         </div>
                     </div>
 
-                    <div className="bg-white rounded-xl p-6 shadow-lg">
-                        <h3 className="text-xl font-bold text-gray-800 mb-4">Recent Transactions</h3>
-                        <div className="space-y-3">
-                            {dashboardData.recent_transactions && dashboardData.recent_transactions.map(transaction => (
-                                <div key={transaction.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                    <div>
-                                        <p className="font-semibold text-gray-800">{transaction.customer_name}</p>
-                                        <p className="text-sm text-gray-600">{transaction.description || 'No description'}</p>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white rounded-xl p-6 shadow-lg">
+                            <h3 className="text-xl font-bold text-gray-800 mb-4">Low Stock Alert</h3>
+                            <div className="space-y-3">
+                                {products.filter(p => p.stock <= p.low_stock_threshold).slice(0, 5).map(product => (
+                                    <div key={product.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                                        <div>
+                                            <p className="font-semibold text-gray-800">{product.name}</p>
+                                            <p className="text-sm text-gray-600">Stock: {product.stock} {product.unit}</p>
+                                        </div>
+                                        <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm">
+                                            Low Stock
+                                        </span>
                                     </div>
-                                    <div className="text-right">
-                                        <p className={`font-bold ${transaction.transaction_type === 'borrow' ? 'text-red-600' : 'text-green-600'}`}>
-                                            {transaction.transaction_type === 'borrow' ? '-' : '+'}₹{transaction.amount}
-                                        </p>
-                                        <p className="text-xs text-gray-500">{new Date(transaction.created_at).toLocaleDateString()}</p>
-                                    </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-xl p-6 shadow-lg">
+                            <h3 className="text-xl font-bold text-gray-800 mb-4">Recent Transactions</h3>
+                            <div className="space-y-3">
+                                {transactions.slice(0, 5).map(transaction => {
+                                    const customer = customers.find(c => c.id === transaction.customer_id);
+                                    return (
+                                        <div key={transaction.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                            <div>
+                                                <p className="font-semibold text-gray-800">{customer?.name}</p>
+                                                <p className="text-sm text-gray-600">{transaction.description}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className={`font-bold ${transaction.transaction_type === 'borrow' ? 'text-red-600' : 'text-green-600'}`}>
+                                                    {transaction.transaction_type === 'borrow' ? '-' : '+'}₹{transaction.amount}
+                                                </p>
+                                                <p className="text-xs text-gray-500">{transaction.created_at}</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
                     </div>
                 </div>
             );
         }
 
-        /* --- Reusable Modals (Moved outside for better structure) --- */
-
-        // Customer Form Modal (Used for Add/Edit Customer)
-        const CustomerForm = ({ customer, onClose, onSave }) => {
-            // Note: The original code's ProductForm had Customer fields, so this assumes it was meant to be a Customer Form.
-            const initialFormData = customer || { name: '', phone: '', email: '', address: '' };
-            const [formData, setFormData] = useState(initialFormData);
-            const [saving, setSaving] = useState(false);
-
-            const handleSubmit = async (e) => {
-                e.preventDefault();
-                setSaving(true);
-                try {
-                    let result;
-                    if (customer) {
-                        // Assuming you would have an updateCustomer API function
-                        // result = await api.updateCustomer(customer.id, formData);
-                        // For now, let's just use the addCustomer placeholder logic if update isn't available
-                         result = await api.addCustomer(formData); // Placeholder
-                    } else {
-                        result = await api.addCustomer(formData);
-                    }
-                    onSave(result); // Call the onSave prop with the result
-                    onClose();
-                } catch (err) {
-                    alert(`Error ${customer ? 'updating' : 'adding'} customer`);
-                } finally {
-                    setSaving(false);
-                }
-            };
-
-            return (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-                        <h3 className="text-xl font-bold text-gray-800 mb-4">
-                            {customer ? 'Edit Customer' : 'Add New Customer'}
-                        </h3>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
-                                <input
-                                    type="text"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    required
-                                />
-                            </div>
-                            {/* The original product form had phone/email/address, retaining that structure for a customer */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                                <input
-                                    type="tel"
-                                    value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                                <input
-                                    type="email"
-                                    value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                                <textarea
-                                    value={formData.address}
-                                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    rows="2"
-                                ></textarea>
-                            </div>
-                            <div className="flex gap-3 pt-4">
-                                <button
-                                    type="submit"
-                                    disabled={saving}
-                                    className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400"
-                                >
-                                    {saving ? 'Saving...' : (customer ? 'Update Customer' : 'Add Customer')}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={onClose}
-                                    className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            );
-        };
-        
-        // Transaction Modal (Used for Borrow/Repay)
-        const TransactionModal = ({ customer, onClose, transactionType, onSave }) => {
-            const [amount, setAmount] = useState('');
-            const [description, setDescription] = useState('');
-            const [saving, setSaving] = useState(false);
-
-            const handleSubmit = async (e) => {
-                e.preventDefault();
-                setSaving(true);
-                try {
-                    const transactionData = {
-                        customer_id: customer.id,
-                        amount: parseFloat(amount),
-                        description
-                    };
-                    
-                    let result;
-                    if (transactionType === 'borrow') {
-                        result = await api.addBorrow(transactionData);
-                    } else {
-                        result = await api.addRepayment(transactionData);
-                    }
-                    
-                    onSave(result); // Call the onSave prop
-                    onClose();
-                } catch (err) {
-                    alert('Error recording transaction');
-                } finally {
-                    setSaving(false);
-                }
-            };
-
-            return (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl p-6 w-full max-w-md">
-                        <h3 className="text-xl font-bold text-gray-800 mb-4">
-                            {transactionType === 'borrow' ? 'Record Borrow' : 'Record Repayment'}
-                        </h3>
-                        <p className="text-gray-600 mb-4">Customer: <strong>{customer.name}</strong></p>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
-                                <input
-                                    type="number"
-                                    value={amount}
-                                    onChange={(e) => setAmount(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    required
-                                    min="0"
-                                    step="0.01"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                                <textarea
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    rows="2"
-                                    placeholder="Optional note..."
-                                ></textarea>
-                            </div>
-                            <div className="flex gap-3 pt-4">
-                                <button
-                                    type="submit"
-                                    disabled={saving}
-                                    className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400"
-                                >
-                                    {saving ? 'Saving...' : 'Submit'}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={onClose}
-                                    className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            );
-        };
-
-        /* --- New Customer Component (Refactored from original Products logic) --- */
-
-        function Customers({ user }) {
-            const [customers, setCustomers] = useState([]);
-            const [loading, setLoading] = useState(true);
+        // Products Component
+        function Products({ user }) {
+            const [products, setProducts] = useState(mockData.products);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [selectedCategory, setSelectedCategory] = useState('All');
             const [showAddModal, setShowAddModal] = useState(false);
-            const [showTransactionModal, setShowTransactionModal] = useState(false); // MISSING STATE
-            const [selectedCustomer, setSelectedCustomer] = useState(null); // MISSING STATE
-            const [transactionType, setTransactionType] = useState('borrow'); // MISSING STATE
+            const [editingProduct, setEditingProduct] = useState(null);
 
-            // The Products-related states (categories, searchTerm, selectedCategory, editingProduct) have been removed,
-            // as this component is clearly for Customers.
+            const categories = ['All', ...new Set(products.map(p => p.category))];
 
-            useEffect(() => {
-                loadCustomers();
-            }, []);
+            const filteredProducts = products.filter(p => {
+                const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
+                const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
+                return matchesSearch && matchesCategory;
+            });
 
-            const loadCustomers = async () => {
-                setLoading(true);
-                try {
-                    const data = await api.getCustomers();
-                    setCustomers(data);
-                } catch (err) {
-                    console.error('Error loading customers:', err);
-                    setCustomers([]);
-                } finally {
-                    setLoading(false);
-                }
+            const ProductForm = ({ product, onClose }) => {
+                const [formData, setFormData] = useState(product || {
+                    name: '', category: 'Grains', price: 0, stock: 0, low_stock_threshold: 20, unit: 'piece'
+                });
+
+                const handleSubmit = (e) => {
+                    e.preventDefault();
+                    if (product) {
+                        setProducts(products.map(p => p.id === product.id ? { ...formData, id: product.id } : p));
+                    } else {
+                        setProducts([...products, { ...formData, id: Date.now() }]);
+                    }
+                    onClose();
+                };
+
+                return (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+                            <h3 className="text-xl font-bold text-gray-800 mb-4">
+                                {product ? 'Edit Product' : 'Add New Product'}
+                            </h3>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Product Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.name}
+                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                                    <select
+                                        value={formData.category}
+                                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    >
+                                        <option>Grains</option>
+                                        <option>Dairy</option>
+                                        <option>Vegetables</option>
+                                        <option>Bakery</option>
+                                        <option>Snacks</option>
+                                        <option>Beverages</option>
+                                        <option>Spices</option>
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Price (₹)</label>
+                                        <input
+                                            type="number"
+                                            value={formData.price}
+                                            onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Stock</label>
+                                        <input
+                                            type="number"
+                                            value={formData.stock}
+                                            onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Low Stock Alert</label>
+                                        <input
+                                            type="number"
+                                            value={formData.low_stock_threshold}
+                                            onChange={(e) => setFormData({ ...formData, low_stock_threshold: parseInt(e.target.value) })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
+                                        <input
+                                            type="text"
+                                            value={formData.unit}
+                                            onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="submit"
+                                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700"
+                                    >
+                                        {product ? 'Update' : 'Add'} Product
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={onClose}
+                                        className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                );
             };
-            
-            // This function handles refreshing after Add/Update Customer or Transaction
-            const handleSave = () => {
-                loadCustomers();
+
+            return (
+                <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-2xl font-bold text-gray-800">Product Inventory</h2>
+                        {(user.role === 'owner' || user.role === 'staff') && (
+                            <button
+                                onClick={() => setShowAddModal(true)}
+                                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                            >
+                                <i className="fas fa-plus"></i> Add Product
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="bg-white rounded-xl p-6 shadow-lg">
+                        <div className="flex flex-col md:flex-row gap-4 mb-6">
+                            <div className="flex-1">
+                                <div className="relative">
+                                    <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                    <input
+                                        type="text"
+                                        placeholder="Search products..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <select
+                                    value={selectedCategory}
+                                    onChange={(e) => setSelectedCategory(e.target.value)}
+                                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                >
+                                    {categories.map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="border-b border-gray-200">
+                                        <th className="text-left py-3 px-4 font-semibold text-gray-700">Product</th>
+                                        <th className="text-left py-3 px-4 font-semibold text-gray-700">Category</th>
+                                        <th className="text-left py-3 px-4 font-semibold text-gray-700">Price</th>
+                                        <th className="text-left py-3 px-4 font-semibold text-gray-700">Stock</th>
+                                        <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
+                                        {(user.role === 'owner' || user.role === 'staff') && (
+                                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
+                                        )}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredProducts.map(product => (
+                                        <tr key={product.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                            <td className="py-3 px-4 font-medium text-gray-800">{product.name}</td>
+                                            <td className="py-3 px-4 text-gray-600">{product.category}</td>
+                                            <td className="py-3 px-4 text-gray-800">₹{product.price}</td>
+                                            <td className="py-3 px-4 text-gray-800">{product.stock} {product.unit}</td>
+                                            <td className="py-3 px-4">
+                                                {product.stock <= product.low_stock_threshold ? (
+                                                    <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm">
+                                                        Low Stock
+                                                    </span>
+                                                ) : (
+                                                    <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm">
+                                                        In Stock
+                                                    </span>
+                                                )}
+                                            </td>
+                                            {(user.role === 'owner' || user.role === 'staff') && (
+                                                <td className="py-3 px-4">
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => setEditingProduct(product)}
+                                                            className="text-blue-600 hover:text-blue-800"
+                                                        >
+                                                            <i className="fas fa-edit"></i>
+                                                        </button>
+                                                        {user.role === 'owner' && (
+                                                            <button
+                                                                onClick={() => setProducts(products.filter(p => p.id !== product.id))}
+                                                                className="text-red-600 hover:text-red-800"
+                                                            >
+                                                                <i className="fas fa-trash"></i>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            )}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {showAddModal && <ProductForm onClose={() => setShowAddModal(false)} />}
+                    {editingProduct && <ProductForm product={editingProduct} onClose={() => setEditingProduct(null)} />}
+                </div>
+            );
+        }
+
+        // Customers Component
+        function Customers() {
+            const [customers, setCustomers] = useState(mockData.customers);
+            const [selectedCustomer, setSelectedCustomer] = useState(null);
+            const [showAddModal, setShowAddModal] = useState(false);
+            const [showTransactionModal, setShowTransactionModal] = useState(false);
+            const [transactionType, setTransactionType] = useState('borrow');
+
+            const CustomerForm = ({ onClose }) => {
+                const [formData, setFormData] = useState({
+                    name: '', phone: '', email: '', address: ''
+                });
+
+                const handleSubmit = (e) => {
+                    e.preventDefault();
+                    setCustomers([...customers, { 
+                        ...formData, 
+                        id: Date.now(), 
+                        total_borrowed: 0, 
+                        total_repaid: 0 
+                    }]);
+                    onClose();
+                };
+
+                return (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-xl p-6 w-full max-w-md">
+                            <h3 className="text-xl font-bold text-gray-800 mb-4">Add New Customer</h3>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.name}
+                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                                    <input
+                                        type="tel"
+                                        value={formData.phone}
+                                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                    <input
+                                        type="email"
+                                        value={formData.email}
+                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                                    <textarea
+                                        value={formData.address}
+                                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        rows="2"
+                                    ></textarea>
+                                </div>
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="submit"
+                                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700"
+                                    >
+                                        Add Customer
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={onClose}
+                                        className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                );
             };
 
-            if (loading) {
-                return <div className="text-center py-8">Loading customers...</div>;
-            }
+            const TransactionModal = ({ customer, onClose }) => {
+                const [amount, setAmount] = useState('');
+                const [description, setDescription] = useState('');
+
+                const handleSubmit = (e) => {
+                    e.preventDefault();
+                    const amountNum = parseFloat(amount);
+                    
+                    setCustomers(customers.map(c => {
+                        if (c.id === customer.id) {
+                            if (transactionType === 'borrow') {
+                                return { ...c, total_borrowed: c.total_borrowed + amountNum };
+                            } else {
+                                return { ...c, total_repaid: c.total_repaid + amountNum };
+                            }
+                        }
+                        return c;
+                    }));
+                    
+                    onClose();
+                };
+
+                return (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-xl p-6 w-full max-w-md">
+                            <h3 className="text-xl font-bold text-gray-800 mb-4">
+                                {transactionType === 'borrow' ? 'Record Borrow' : 'Record Repayment'}
+                            </h3>
+                            <p className="text-gray-600 mb-4">Customer: <strong>{customer.name}</strong></p>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
+                                    <input
+                                        type="number"
+                                        value={amount}
+                                        onChange={(e) => setAmount(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        required
+                                        min="0"
+                                        step="0.01"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                    <textarea
+                                        value={description}
+                                        onChange={(e) => setDescription(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                                        rows="2"
+                                        placeholder="Optional note..."
+                                    ></textarea>
+                                </div>
+                                <div className="flex gap-3 pt-4">
+                                    <button
+                                        type="submit"
+                                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700"
+                                    >
+                                        Submit
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={onClose}
+                                        className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                );
+            };
 
             return (
                 <div className="space-y-6">
                     <div className="flex items-center justify-between">
                         <h2 className="text-2xl font-bold text-gray-800">Customer Management</h2>
                         <button
-                            onClick={() => {
-                                setSelectedCustomer(null); // Ensure null for 'Add'
-                                setShowAddModal(true);
-                            }}
+                            onClick={() => setShowAddModal(true)}
                             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
                         >
                             <i className="fas fa-user-plus"></i> Add Customer
@@ -559,11 +627,7 @@
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {customers.map(customer => {
-                            // Safely calculate balance, default to 0 if values are missing
-                            const borrowed = customer.total_borrowed || 0;
-                            const repaid = customer.total_repaid || 0;
-                            const balance = borrowed - repaid;
-                            
+                            const balance = customer.total_borrowed - customer.total_repaid;
                             return (
                                 <div key={customer.id} className="bg-white rounded-xl p-6 shadow-lg">
                                     <div className="flex items-start justify-between mb-4">
@@ -584,16 +648,16 @@
                                     <div className="space-y-2 mb-4">
                                         <div className="flex justify-between text-sm">
                                             <span className="text-gray-600">Total Borrowed:</span>
-                                            <span className="font-semibold text-red-600">₹{borrowed}</span>
+                                            <span className="font-semibold text-red-600">₹{customer.total_borrowed}</span>
                                         </div>
                                         <div className="flex justify-between text-sm">
                                             <span className="text-gray-600">Total Repaid:</span>
-                                            <span className="font-semibold text-green-600">₹{repaid}</span>
+                                            <span className="font-semibold text-green-600">₹{customer.total_repaid}</span>
                                         </div>
                                         <div className="flex justify-between text-sm pt-2 border-t">
                                             <span className="text-gray-700 font-medium">Balance:</span>
                                             <span className={`font-bold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                                ₹{Math.abs(balance).toFixed(2)}
+                                                ₹{balance}
                                             </span>
                                         </div>
                                     </div>
@@ -625,150 +689,219 @@
                         })}
                     </div>
 
-                    {showAddModal && (
-                        <CustomerForm 
-                            customer={selectedCustomer}
-                            onClose={() => setShowAddModal(false)}
-                            onSave={handleSave}
-                        />
-                    )}
-
+                    {showAddModal && <CustomerForm onClose={() => setShowAddModal(false)} />}
                     {showTransactionModal && selectedCustomer && (
-                        <TransactionModal
-                            customer={selectedCustomer}
-                            transactionType={transactionType}
+                        <TransactionModal 
+                            customer={selectedCustomer} 
                             onClose={() => {
                                 setShowTransactionModal(false);
                                 setSelectedCustomer(null);
-                            }}
-                            onSave={handleSave}
+                            }} 
                         />
                     )}
                 </div>
             );
         }
 
-        /* --- Main App Component --- */
+        // Analytics Component
+        function Analytics({ products, customers, transactions }) {
+            const totalRevenue = 45320;
+            const monthlyGrowth = 12.5;
+            const outstandingDebt = customers.reduce((sum, c) => sum + (c.total_borrowed - c.total_repaid), 0);
+            
+            return (
+                <div className="space-y-6">
+                    <h2 className="text-2xl font-bold text-gray-800">Reports & Analytics</h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-white rounded-xl p-6 shadow-lg">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-gray-700">Total Revenue</h3>
+                                <i className="fas fa-chart-line text-2xl text-blue-600"></i>
+                            </div>
+                            <p className="text-3xl font-bold text-gray-800">₹{totalRevenue}</p>
+                            <p className="text-sm text-green-600 mt-2">+{monthlyGrowth}% this month</p>
+                        </div>
+
+                        <div className="bg-white rounded-xl p-6 shadow-lg">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-gray-700">Outstanding Debt</h3>
+                                <i className="fas fa-exclamation-circle text-2xl text-red-600"></i>
+                            </div>
+                            <p className="text-3xl font-bold text-gray-800">₹{outstandingDebt}</p>
+                            <p className="text-sm text-gray-600 mt-2">{customers.filter(c => c.total_borrowed > c.total_repaid).length} customers</p>
+                        </div>
+
+                        <div className="bg-white rounded-xl p-6 shadow-lg">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-gray-700">Total Products</h3>
+                                <i className="fas fa-boxes text-2xl text-green-600"></i>
+                            </div>
+                            <p className="text-3xl font-bold text-gray-800">{products.length}</p>
+                            <p className="text-sm text-gray-600 mt-2">{products.filter(p => p.stock > p.low_stock_threshold).length} in stock</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="bg-white rounded-xl p-6 shadow-lg">
+                            <h3 className="text-lg font-bold text-gray-800 mb-4">Top Customers by Debt</h3>
+                            <div className="space-y-3">
+                                {customers
+                                    .filter(c => c.total_borrowed > c.total_repaid)
+                                    .sort((a, b) => (b.total_borrowed - b.total_repaid) - (a.total_borrowed - a.total_repaid))
+                                    .slice(0, 5)
+                                    .map(customer => (
+                                        <div key={customer.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                            <div>
+                                                <p className="font-semibold text-gray-800">{customer.name}</p>
+                                                <p className="text-sm text-gray-600">{customer.phone}</p>
+                                            </div>
+                                            <span className="text-red-600 font-bold">
+                                                ₹{customer.total_borrowed - customer.total_repaid}
+                                            </span>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-xl p-6 shadow-lg">
+                            <h3 className="text-lg font-bold text-gray-800 mb-4">Product Categories</h3>
+                            <div className="space-y-3">
+                                {[...new Set(products.map(p => p.category))].map(category => {
+                                    const categoryProducts = products.filter(p => p.category === category);
+                                    const percentage = (categoryProducts.length / products.length * 100).toFixed(1);
+                                    return (
+                                        <div key={category}>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-sm font-medium text-gray-700">{category}</span>
+                                                <span className="text-sm text-gray-600">{categoryProducts.length} items</span>
+                                            </div>
+                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                                <div
+                                                    className="bg-blue-600 h-2 rounded-full"
+                                                    style={{ width: `${percentage}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Main App Component
         function App() {
             const [user, setUser] = useState(null);
-            const [view, setView] = useState('dashboard'); // 'dashboard', 'products', 'customers'
-            const [loadingSession, setLoadingSession] = useState(true);
+            const [activeTab, setActiveTab] = useState('dashboard');
 
-            useEffect(() => {
-                checkUserSession();
-            }, []);
-
-            const checkUserSession = async () => {
-                try {
-                    const result = await api.checkSession();
-                    if (result.success && result.user) {
-                        setUser(result.user);
-                    }
-                } catch (error) {
-                    console.error('Session check failed:', error);
-                } finally {
-                    setLoadingSession(false);
-                }
-            };
-
-            const handleLogout = async () => {
-                try {
-                    await api.logout();
-                } catch (err) {
-                    console.error('Logout failed:', err);
-                } finally {
-                    setUser(null);
-                    setView('dashboard'); // Default view after logout
-                }
-            };
-
-            const renderView = () => {
-                if (loadingSession) {
-                    return <div className="text-center py-20 text-xl font-medium">Checking session...</div>;
-                }
-
-                if (!user) {
-                    return <Login onLogin={setUser} />;
-                }
-
-                switch (view) {
-                    case 'dashboard':
-                        return <Dashboard user={user} />;
-                    case 'products':
-                        // Placeholder, assuming a 'Products' component exists or will be added.
-                        return <ProductsComponent user={user} />; 
-                    case 'customers':
-                        return <Customers user={user} />;
-                    default:
-                        return <Dashboard user={user} />;
-                }
-            };
-
-            // Placeholder for ProductsComponent
-            const ProductsComponent = ({ user }) => {
-                const [products, setProducts] = useState([]);
-                // ... (omitted product logic to keep this focused on the fix)
-                return <div className="py-8">
-                    <h2 className="text-2xl font-bold mb-4">Products (Placeholder)</h2>
-                    <p>Product listing logic would go here.</p>
-                </div>
-            };
-
-
-            if (!user && !loadingSession) {
+            if (!user) {
                 return <Login onLogin={setUser} />;
             }
 
-            // Main layout for logged-in user
             return (
-                <div className="min-h-screen bg-gray-100 flex">
-                    {user && (
-                        <nav className="w-64 bg-white shadow-lg p-6 flex flex-col justify-between">
-                            <div>
-                                <div className="text-center mb-10">
-                                    <i className="fas fa-store text-4xl text-blue-600 mb-2"></i>
-                                    <h1 className="text-xl font-bold text-gray-800">GSMS</h1>
+                <div className="min-h-screen bg-gray-100">
+                    {/* Header */}
+                    <header className="bg-white shadow-md">
+                        <div className="max-w-7xl mx-auto px-4 py-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <i className="fas fa-store text-3xl text-blue-600"></i>
+                                    <div>
+                                        <h1 className="text-2xl font-bold text-gray-800">Grocery Store</h1>
+                                        <p className="text-sm text-gray-600">Management System</p>
+                                    </div>
                                 </div>
-                                <ul className="space-y-2">
-                                    <li>
-                                        <a href="#" onClick={() => setView('dashboard')} className={`flex items-center p-3 rounded-lg transition ${view === 'dashboard' ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-50'}`}>
-                                            <i className="fas fa-chart-pie mr-3"></i> Dashboard
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a href="#" onClick={() => setView('products')} className={`flex items-center p-3 rounded-lg transition ${view === 'products' ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-50'}`}>
-                                            <i className="fas fa-boxes mr-3"></i> Products
-                                        </a>
-                                    </li>
-                                    <li>
-                                        <a href="#" onClick={() => setView('customers')} className={`flex items-center p-3 rounded-lg transition ${view === 'customers' ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-50'}`}>
-                                            <i className="fas fa-users mr-3"></i> Customers
-                                        </a>
-                                    </li>
-                                    {/* Add more links based on user role if needed */}
-                                </ul>
+                                <div className="flex items-center gap-4">
+                                    <div className="text-right">
+                                        <p className="font-semibold text-gray-800">{user.name}</p>
+                                        <p className="text-sm text-gray-600 capitalize">{user.role}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setUser(null)}
+                                        className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2"
+                                    >
+                                        <i className="fas fa-sign-out-alt"></i> Logout
+                                    </button>
+                                </div>
                             </div>
-                            <div className="pt-6 border-t border-gray-200">
-                                <p className="text-sm text-gray-700 mb-2">Logged in as: <strong>{user.username} ({user.role})</strong></p>
-                                <button 
-                                    onClick={handleLogout}
-                                    className="w-full text-left p-3 rounded-lg text-red-600 hover:bg-red-50 transition flex items-center"
+                        </div>
+                    </header>
+
+                    {/* Navigation */}
+                    <nav className="bg-white border-b">
+                        <div className="max-w-7xl mx-auto px-4">
+                            <div className="flex gap-1">
+                                <button
+                                    onClick={() => setActiveTab('dashboard')}
+                                    className={`px-6 py-3 font-medium transition ${
+                                        activeTab === 'dashboard'
+                                            ? 'border-b-2 border-blue-600 text-blue-600'
+                                            : 'text-gray-600 hover:text-gray-800'
+                                    }`}
                                 >
-                                    <i className="fas fa-sign-out-alt mr-3"></i> Logout
+                                    <i className="fas fa-home mr-2"></i> Dashboard
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('products')}
+                                    className={`px-6 py-3 font-medium transition ${
+                                        activeTab === 'products'
+                                            ? 'border-b-2 border-blue-600 text-blue-600'
+                                            : 'text-gray-600 hover:text-gray-800'
+                                    }`}
+                                >
+                                    <i className="fas fa-box mr-2"></i> Products
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('customers')}
+                                    className={`px-6 py-3 font-medium transition ${
+                                        activeTab === 'customers'
+                                            ? 'border-b-2 border-blue-600 text-blue-600'
+                                            : 'text-gray-600 hover:text-gray-800'
+                                    }`}
+                                >
+                                    <i className="fas fa-users mr-2"></i> Customers
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('analytics')}
+                                    className={`px-6 py-3 font-medium transition ${
+                                        activeTab === 'analytics'
+                                            ? 'border-b-2 border-blue-600 text-blue-600'
+                                            : 'text-gray-600 hover:text-gray-800'
+                                    }`}
+                                >
+                                    <i className="fas fa-chart-bar mr-2"></i> Analytics
                                 </button>
                             </div>
-                        </nav>
-                    )}
-                    <main className="flex-1 p-8 overflow-y-auto">
-                        {renderView()}
+                        </div>
+                    </nav>
+
+                    {/* Main Content */}
+                    <main className="max-w-7xl mx-auto px-4 py-8">
+                        {activeTab === 'dashboard' && (
+                            <Dashboard 
+                                products={mockData.products} 
+                                customers={mockData.customers}
+                                transactions={mockData.transactions}
+                            />
+                        )}
+                        {activeTab === 'products' && <Products user={user} />}
+                        {activeTab === 'customers' && <Customers />}
+                        {activeTab === 'analytics' && (
+                            <Analytics 
+                                products={mockData.products}
+                                customers={mockData.customers}
+                                transactions={mockData.transactions}
+                            />
+                        )}
                     </main>
                 </div>
             );
         }
 
-        // Initialize App
         ReactDOM.render(<App />, document.getElementById('root'));
-
     </script>
 </body>
 </html>
