@@ -14,10 +14,11 @@ app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(16))
 
 # CORS - Update after getting your Render URLs
 ALLOWED_ORIGINS = [
-    'http://localhost:8000',
-    os.environ.get('FRONTEND_URL', 'http://localhost:8000'),
-    'https://*.onrender.com'
+    'https://grocery-store-frontend.onrender.com',  # Add your actual frontend URL
+    'https://*.onrender.com',
+    'http://localhost:8000'
 ]
+
 
 CORS(app, 
      origins=ALLOWED_ORIGINS,
