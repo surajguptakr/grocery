@@ -1,923 +1,541 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Grocery Store Management System</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body>
-    <div id="root"></div>
+import os
+from flask import Flask, request, jsonify, session
+from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from datetime import datetime, timedelta
+import secrets
 
-    <script type="text/babel">
-        const { useState, useEffect } = React;
+app = Flask(__name__)
 
-        // Mock API (Replace with actual backend calls)
-        const API_URL = 'http://localhost:5000/api';
+# Configuration
+app.secret_key = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
-        const api = {
-    login: async (username, password) => {
-        const response = await fetch(`${API_URL}/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            //credentials: 'include',  //  MUST HAVE THIS
-            body: JSON.stringify({ username, password })
-        });
-        return await response.json();
-    },
+# Session configuration for production
+app.config['SESSION_COOKIE_SECURE'] = True  # Only send over HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Allow cross-site requests
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)  # Session lasts 7 days
+
+# Get frontend URL from environment or use default
+ALLOWED_ORIGINS = [
+     'https://grocery-store-frontend.onrender.com',  
+     'https://*.onrender.com', 
+     'http://localhost:8000' ]
+
+# CORS - CRITICAL: Must allow credentials
+# Database connection
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+def get_db():
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    return conn
+
+# Database initialization
+def init_db():
+    conn = get_db()
+    c = conn.cursor()
     
-    // For ALL other API calls, also add:
-   // credentials: 'include'
-}
+    # Users table
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        role TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    
+    # Customers table
+    c.execute('''CREATE TABLE IF NOT EXISTS customers (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        phone TEXT UNIQUE NOT NULL,
+        email TEXT,
+        address TEXT,
+        total_borrowed DECIMAL(10,2) DEFAULT 0,
+        total_repaid DECIMAL(10,2) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    
+    # Products table
+    c.execute('''CREATE TABLE IF NOT EXISTS products (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        price DECIMAL(10,2) NOT NULL,
+        stock INTEGER NOT NULL,
+        low_stock_threshold INTEGER DEFAULT 20,
+        unit TEXT DEFAULT 'piece',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    
+    # Transactions table
+    c.execute('''CREATE TABLE IF NOT EXISTS transactions (
+        id SERIAL PRIMARY KEY,
+        customer_id INTEGER NOT NULL,
+        transaction_type TEXT NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        description TEXT,
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )''')
+    
+    # Sales table
+    c.execute('''CREATE TABLE IF NOT EXISTS sales (
+        id SERIAL PRIMARY KEY,
+        customer_id INTEGER,
+        total_amount DECIMAL(10,2) NOT NULL,
+        payment_status TEXT DEFAULT 'paid',
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    )''')
+    
+    # Sale items table
+    c.execute('''CREATE TABLE IF NOT EXISTS sale_items (
+        id SERIAL PRIMARY KEY,
+        sale_id INTEGER NOT NULL,
+        product_id INTEGER NOT NULL,
+        quantity INTEGER NOT NULL,
+        price DECIMAL(10,2) NOT NULL,
+        FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products(id)
+    )''')
+    
+    # Insert default users
+    try:
+        c.execute("INSERT INTO users (username, password, role, name) VALUES (%s, %s, %s, %s)",
+                  ('owner', generate_password_hash('owner123'), 'owner', 'Store Owner'))
+        c.execute("INSERT INTO users (username, password, role, name) VALUES (%s, %s, %s, %s)",
+                  ('staff1', generate_password_hash('staff123'), 'staff', 'John Staff'))
+    except Exception as e:
+        print(f"Users already exist: {e}")
+    
+    # Insert sample products
+    sample_products = [
+        ('Rice (1kg)', 'Grains', 60, 100, 20, 'kg'),
+        ('Wheat Flour (1kg)', 'Grains', 45, 80, 15, 'kg'),
+        ('Milk (1L)', 'Dairy', 55, 15, 20, 'liter'),
+        ('Paneer (200g)', 'Dairy', 80, 25, 10, 'pack'),
+        ('Tomatoes (1kg)', 'Vegetables', 40, 50, 15, 'kg'),
+        ('Onions (1kg)', 'Vegetables', 35, 60, 20, 'kg'),
+        ('Potatoes (1kg)', 'Vegetables', 30, 70, 25, 'kg'),
+        ('Bread', 'Bakery', 25, 40, 15, 'piece'),
+        ('Biscuits', 'Snacks', 20, 100, 30, 'pack'),
+        ('Tea (250g)', 'Beverages', 150, 50, 10, 'pack'),
+    ]
+    
+    for product in sample_products:
+        try:
+            c.execute("INSERT INTO products (name, category, price, stock, low_stock_threshold, unit) VALUES (%s, %s, %s, %s, %s, %s)", product)
+        except Exception as e:
+            print(f"Product exists: {e}")
+    
+    # Insert sample customers
+    sample_customers = [
+        ('Rajesh Kumar', '9876543210', 'rajesh@email.com', '123 Main St', 1500, 800),
+        ('Priya Sharma', '9876543211', 'priya@email.com', '456 Park Ave', 2000, 2000),
+        ('Amit Patel', '9876543212', 'amit@email.com', '789 Gandhi Road', 500, 0),
+    ]
+    
+    for customer in sample_customers:
+        try:
+            c.execute("INSERT INTO customers (name, phone, email, address, total_borrowed, total_repaid) VALUES (%s, %s, %s, %s, %s, %s)", customer)
+        except Exception as e:
+            print(f"Customer exists: {e}")
+    
+    conn.commit()
+    conn.close()
+    print("Database initialized successfully!")
 
+# Health check endpoint
+@app.route('/')
+def home():
+    return jsonify({'message': 'Grocery Store API is running!', 'status': 'ok'})
 
-        // Mock data for demo
-        const mockData = {
-            user: null,
-            products: [
-                { id: 1, name: 'Rice (1kg)', category: 'Grains', price: 60, stock: 100, low_stock_threshold: 20, unit: 'kg' },
-                { id: 2, name: 'Wheat Flour (1kg)', category: 'Grains', price: 45, stock: 80, low_stock_threshold: 15, unit: 'kg' },
-                { id: 3, name: 'Milk (1L)', category: 'Dairy', price: 55, stock: 15, low_stock_threshold: 20, unit: 'liter' },
-                { id: 4, name: 'Paneer (200g)', category: 'Dairy', price: 80, stock: 25, low_stock_threshold: 10, unit: 'pack' },
-                { id: 5, name: 'Tomatoes (1kg)', category: 'Vegetables', price: 40, stock: 50, low_stock_threshold: 15, unit: 'kg' },
-                { id: 6, name: 'Onions (1kg)', category: 'Vegetables', price: 35, stock: 60, low_stock_threshold: 20, unit: 'kg' },
-                { id: 7, name: 'Potatoes (1kg)', category: 'Vegetables', price: 30, stock: 70, low_stock_threshold: 25, unit: 'kg' },
-                { id: 8, name: 'Bread', category: 'Bakery', price: 25, stock: 40, low_stock_threshold: 15, unit: 'piece' },
-                { id: 9, name: 'Biscuits', category: 'Snacks', price: 20, stock: 100, low_stock_threshold: 30, unit: 'pack' },
-                { id: 10, name: 'Tea (250g)', category: 'Beverages', price: 150, stock: 50, low_stock_threshold: 10, unit: 'pack' },
-            ],
-            customers: [
-                { id: 1, name: 'Rajesh Kumar', phone: '9876543210', email: 'rajesh@email.com', total_borrowed: 1500, total_repaid: 800 },
-                { id: 2, name: 'Priya Sharma', phone: '9876543211', email: 'priya@email.com', total_borrowed: 2000, total_repaid: 2000 },
-                { id: 3, name: 'Amit Patel', phone: '9876543212', email: 'amit@email.com', total_borrowed: 500, total_repaid: 0 },
-            ],
-            transactions: [
-                { id: 1, customer_id: 1, transaction_type: 'borrow', amount: 500, description: 'Monthly groceries', created_at: '2025-09-25' },
-                { id: 2, customer_id: 1, transaction_type: 'repay', amount: 300, description: 'Partial payment', created_at: '2025-09-28' },
-                { id: 3, customer_id: 3, transaction_type: 'borrow', amount: 500, description: 'Weekly shopping', created_at: '2025-09-29' },
-            ]
-        };
-
-        // Login Component
-        function Login({ onLogin }) {
-            const [username, setUsername] = useState('');
-            const [password, setPassword] = useState('');
-            const [error, setError] = useState('');
-
-            const handleLogin = (e) => {
-                e.preventDefault();
-                // Mock login
-                if ((username === 'owner' && password === 'owner123') || 
-                    (username === 'staff1' && password === 'staff123')) {
-                    onLogin({
-                        username,
-                        role: username === 'owner' ? 'owner' : 'staff',
-                        name: username === 'owner' ? 'Store Owner' : 'John Staff'
-                    });
-                } else {
-                    setError('Invalid credentials');
-                }
-            };
-
-            return (
-                <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-                        <div className="text-center mb-8">
-                            <i className="fas fa-store text-5xl text-blue-600 mb-4"></i>
-                            <h1 className="text-3xl font-bold text-gray-800">Grocery Store</h1>
-                            <p className="text-gray-600">Management System</p>
-                        </div>
-                        <form onSubmit={handleLogin} className="space-y-6">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
-                                <input
-                                    type="text"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    placeholder="Enter username"
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                                <input
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    placeholder="Enter password"
-                                    required
-                                />
-                            </div>
-                            {error && (
-                                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-                                    {error}
-                                </div>
-                            )}
-                            <button
-                                type="submit"
-                                className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
-                            >
-                                Login
-                            </button>
-                        </form>
-                        <div className="mt-6 text-sm text-gray-600 text-center">
-                            <p className="mb-2">Demo Credentials:</p>
-                            <p><strong>Owner:</strong> owner / owner123</p>
-                            <p><strong>Staff:</strong> staff1 / staff123</p>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        // Dashboard Component
-        function Dashboard({ products, customers, transactions }) {
-            const todaySales = 5420;
-            const outstandingDebt = customers.reduce((sum, c) => sum + (c.total_borrowed - c.total_repaid), 0);
-            const lowStockCount = products.filter(p => p.stock <= p.low_stock_threshold).length;
-
-            return (
-                <div className="space-y-6">
-                    <h2 className="text-2xl font-bold text-gray-800">Dashboard</h2>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl p-6 shadow-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-blue-100 text-sm">Today's Sales</p>
-                                    <p className="text-3xl font-bold mt-2">₹{todaySales}</p>
-                                </div>
-                                <i className="fas fa-chart-line text-4xl text-blue-200"></i>
-                            </div>
-                        </div>
-
-                        <div className="bg-gradient-to-br from-red-500 to-red-600 text-white rounded-xl p-6 shadow-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-red-100 text-sm">Outstanding Debt</p>
-                                    <p className="text-3xl font-bold mt-2">₹{outstandingDebt}</p>
-                                </div>
-                                <i className="fas fa-exclamation-triangle text-4xl text-red-200"></i>
-                            </div>
-                        </div>
-
-                        <div className="bg-gradient-to-br from-yellow-500 to-yellow-600 text-white rounded-xl p-6 shadow-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-yellow-100 text-sm">Low Stock Items</p>
-                                    <p className="text-3xl font-bold mt-2">{lowStockCount}</p>
-                                </div>
-                                <i className="fas fa-box-open text-4xl text-yellow-200"></i>
-                            </div>
-                        </div>
-
-                        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl p-6 shadow-lg">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-green-100 text-sm">Total Customers</p>
-                                    <p className="text-3xl font-bold mt-2">{customers.length}</p>
-                                </div>
-                                <i className="fas fa-users text-4xl text-green-200"></i>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div className="bg-white rounded-xl p-6 shadow-lg">
-                            <h3 className="text-xl font-bold text-gray-800 mb-4">Low Stock Alert</h3>
-                            <div className="space-y-3">
-                                {products.filter(p => p.stock <= p.low_stock_threshold).slice(0, 5).map(product => (
-                                    <div key={product.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                                        <div>
-                                            <p className="font-semibold text-gray-800">{product.name}</p>
-                                            <p className="text-sm text-gray-600">Stock: {product.stock} {product.unit}</p>
-                                        </div>
-                                        <span className="bg-red-500 text-white px-3 py-1 rounded-full text-sm">
-                                            Low Stock
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-xl p-6 shadow-lg">
-                            <h3 className="text-xl font-bold text-gray-800 mb-4">Recent Transactions</h3>
-                            <div className="space-y-3">
-                                {transactions.slice(0, 5).map(transaction => {
-                                    const customer = customers.find(c => c.id === transaction.customer_id);
-                                    return (
-                                        <div key={transaction.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                            <div>
-                                                <p className="font-semibold text-gray-800">{customer?.name}</p>
-                                                <p className="text-sm text-gray-600">{transaction.description}</p>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className={`font-bold ${transaction.transaction_type === 'borrow' ? 'text-red-600' : 'text-green-600'}`}>
-                                                    {transaction.transaction_type === 'borrow' ? '-' : '+'}₹{transaction.amount}
-                                                </p>
-                                                <p className="text-xs text-gray-500">{transaction.created_at}</p>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        // Products Component
-        function Products({ user }) {
-            const [products, setProducts] = useState(mockData.products);
-            const [searchTerm, setSearchTerm] = useState('');
-            const [selectedCategory, setSelectedCategory] = useState('All');
-            const [showAddModal, setShowAddModal] = useState(false);
-            const [editingProduct, setEditingProduct] = useState(null);
-
-            const categories = ['All', ...new Set(products.map(p => p.category))];
-
-            const filteredProducts = products.filter(p => {
-                const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
-                const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
-                return matchesSearch && matchesCategory;
-            });
-
-            const ProductForm = ({ product, onClose }) => {
-                const [formData, setFormData] = useState(product || {
-                    name: '', category: 'Grains', price: 0, stock: 0, low_stock_threshold: 20, unit: 'piece'
-                });
-
-                const handleSubmit = (e) => {
-                    e.preventDefault();
-                    if (product) {
-                        setProducts(products.map(p => p.id === product.id ? { ...formData, id: product.id } : p));
-                    } else {
-                        setProducts([...products, { ...formData, id: Date.now() }]);
-                    }
-                    onClose();
-                };
-
-                return (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                        <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-                            <h3 className="text-xl font-bold text-gray-800 mb-4">
-                                {product ? 'Edit Product' : 'Add New Product'}
-                            </h3>
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Product Name</label>
-                                    <input
-                                        type="text"
-                                        value={formData.name}
-                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                                    <select
-                                        value={formData.category}
-                                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        <option>Grains</option>
-                                        <option>Dairy</option>
-                                        <option>Vegetables</option>
-                                        <option>Bakery</option>
-                                        <option>Snacks</option>
-                                        <option>Beverages</option>
-                                        <option>Spices</option>
-                                    </select>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Price (₹)</label>
-                                        <input
-                                            type="number"
-                                            value={formData.price}
-                                            onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Stock</label>
-                                        <input
-                                            type="number"
-                                            value={formData.stock}
-                                            onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            required
-                                        />
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Low Stock Alert</label>
-                                        <input
-                                            type="number"
-                                            value={formData.low_stock_threshold}
-                                            onChange={(e) => setFormData({ ...formData, low_stock_threshold: parseInt(e.target.value) })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>
-                                        <input
-                                            type="text"
-                                            value={formData.unit}
-                                            onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                            required
-                                        />
-                                    </div>
-                                </div>
-                                <div className="flex gap-3 pt-4">
-                                    <button
-                                        type="submit"
-                                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700"
-                                    >
-                                        {product ? 'Update' : 'Add'} Product
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={onClose}
-                                        className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                );
-            };
-
-            return (
-                <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-2xl font-bold text-gray-800">Product Inventory</h2>
-                        {(user.role === 'owner' || user.role === 'staff') && (
-                            <button
-                                onClick={() => setShowAddModal(true)}
-                                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                            >
-                                <i className="fas fa-plus"></i> Add Product
-                            </button>
-                        )}
-                    </div>
-
-                    <div className="bg-white rounded-xl p-6 shadow-lg">
-                        <div className="flex flex-col md:flex-row gap-4 mb-6">
-                            <div className="flex-1">
-                                <div className="relative">
-                                    <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                                    <input
-                                        type="text"
-                                        placeholder="Search products..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <select
-                                    value={selectedCategory}
-                                    onChange={(e) => setSelectedCategory(e.target.value)}
-                                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                >
-                                    {categories.map(cat => (
-                                        <option key={cat} value={cat}>{cat}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead>
-                                    <tr className="border-b border-gray-200">
-                                        <th className="text-left py-3 px-4 font-semibold text-gray-700">Product</th>
-                                        <th className="text-left py-3 px-4 font-semibold text-gray-700">Category</th>
-                                        <th className="text-left py-3 px-4 font-semibold text-gray-700">Price</th>
-                                        <th className="text-left py-3 px-4 font-semibold text-gray-700">Stock</th>
-                                        <th className="text-left py-3 px-4 font-semibold text-gray-700">Status</th>
-                                        {(user.role === 'owner' || user.role === 'staff') && (
-                                            <th className="text-left py-3 px-4 font-semibold text-gray-700">Actions</th>
-                                        )}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {filteredProducts.map(product => (
-                                        <tr key={product.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                            <td className="py-3 px-4 font-medium text-gray-800">{product.name}</td>
-                                            <td className="py-3 px-4 text-gray-600">{product.category}</td>
-                                            <td className="py-3 px-4 text-gray-800">₹{product.price}</td>
-                                            <td className="py-3 px-4 text-gray-800">{product.stock} {product.unit}</td>
-                                            <td className="py-3 px-4">
-                                                {product.stock <= product.low_stock_threshold ? (
-                                                    <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full text-sm">
-                                                        Low Stock
-                                                    </span>
-                                                ) : (
-                                                    <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm">
-                                                        In Stock
-                                                    </span>
-                                                )}
-                                            </td>
-                                            {(user.role === 'owner' || user.role === 'staff') && (
-                                                <td className="py-3 px-4">
-                                                    <div className="flex gap-2">
-                                                        <button
-                                                            onClick={() => setEditingProduct(product)}
-                                                            className="text-blue-600 hover:text-blue-800"
-                                                        >
-                                                            <i className="fas fa-edit"></i>
-                                                        </button>
-                                                        {user.role === 'owner' && (
-                                                            <button
-                                                                onClick={() => setProducts(products.filter(p => p.id !== product.id))}
-                                                                className="text-red-600 hover:text-red-800"
-                                                            >
-                                                                <i className="fas fa-trash"></i>
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            )}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    {showAddModal && <ProductForm onClose={() => setShowAddModal(false)} />}
-                    {editingProduct && <ProductForm product={editingProduct} onClose={() => setEditingProduct(null)} />}
-                </div>
-            );
-        }
-
-        // Customers Component
-        function Customers() {
-            const [customers, setCustomers] = useState(mockData.customers);
-            const [selectedCustomer, setSelectedCustomer] = useState(null);
-            const [showAddModal, setShowAddModal] = useState(false);
-            const [showTransactionModal, setShowTransactionModal] = useState(false);
-            const [transactionType, setTransactionType] = useState('borrow');
-
-            const CustomerForm = ({ onClose }) => {
-                const [formData, setFormData] = useState({
-                    name: '', phone: '', email: '', address: ''
-                });
-
-                const handleSubmit = (e) => {
-                    e.preventDefault();
-                    setCustomers([...customers, { 
-                        ...formData, 
-                        id: Date.now(), 
-                        total_borrowed: 0, 
-                        total_repaid: 0 
-                    }]);
-                    onClose();
-                };
-
-                return (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                        <div className="bg-white rounded-xl p-6 w-full max-w-md">
-                            <h3 className="text-xl font-bold text-gray-800 mb-4">Add New Customer</h3>
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                                    <input
-                                        type="text"
-                                        value={formData.name}
-                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                                    <input
-                                        type="tel"
-                                        value={formData.phone}
-                                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                                    <input
-                                        type="email"
-                                        value={formData.email}
-                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                                    <textarea
-                                        value={formData.address}
-                                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        rows="2"
-                                    ></textarea>
-                                </div>
-                                <div className="flex gap-3 pt-4">
-                                    <button
-                                        type="submit"
-                                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700"
-                                    >
-                                        Add Customer
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={onClose}
-                                        className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                );
-            };
-
-            const TransactionModal = ({ customer, onClose }) => {
-                const [amount, setAmount] = useState('');
-                const [description, setDescription] = useState('');
-
-                const handleSubmit = (e) => {
-                    e.preventDefault();
-                    const amountNum = parseFloat(amount);
-                    
-                    setCustomers(customers.map(c => {
-                        if (c.id === customer.id) {
-                            if (transactionType === 'borrow') {
-                                return { ...c, total_borrowed: c.total_borrowed + amountNum };
-                            } else {
-                                return { ...c, total_repaid: c.total_repaid + amountNum };
-                            }
-                        }
-                        return c;
-                    }));
-                    
-                    onClose();
-                };
-
-                return (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                        <div className="bg-white rounded-xl p-6 w-full max-w-md">
-                            <h3 className="text-xl font-bold text-gray-800 mb-4">
-                                {transactionType === 'borrow' ? 'Record Borrow' : 'Record Repayment'}
-                            </h3>
-                            <p className="text-gray-600 mb-4">Customer: <strong>{customer.name}</strong></p>
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
-                                    <input
-                                        type="number"
-                                        value={amount}
-                                        onChange={(e) => setAmount(e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        required
-                                        min="0"
-                                        step="0.01"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                                    <textarea
-                                        value={description}
-                                        onChange={(e) => setDescription(e.target.value)}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                                        rows="2"
-                                        placeholder="Optional note..."
-                                    ></textarea>
-                                </div>
-                                <div className="flex gap-3 pt-4">
-                                    <button
-                                        type="submit"
-                                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700"
-                                    >
-                                        Submit
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={onClose}
-                                        className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                );
-            };
-
-            return (
-                <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-2xl font-bold text-gray-800">Customer Management</h2>
-                        <button
-                            onClick={() => setShowAddModal(true)}
-                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
-                        >
-                            <i className="fas fa-user-plus"></i> Add Customer
-                        </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {customers.map(customer => {
-                            const balance = customer.total_borrowed - customer.total_repaid;
-                            return (
-                                <div key={customer.id} className="bg-white rounded-xl p-6 shadow-lg">
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div>
-                                            <h3 className="text-lg font-bold text-gray-800">{customer.name}</h3>
-                                            <p className="text-sm text-gray-600">{customer.phone}</p>
-                                            {customer.email && (
-                                                <p className="text-sm text-gray-600">{customer.email}</p>
-                                            )}
-                                        </div>
-                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                                            balance > 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
-                                        }`}>
-                                            <i className="fas fa-user text-xl"></i>
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-2 mb-4">
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-gray-600">Total Borrowed:</span>
-                                            <span className="font-semibold text-red-600">₹{customer.total_borrowed}</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-gray-600">Total Repaid:</span>
-                                            <span className="font-semibold text-green-600">₹{customer.total_repaid}</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm pt-2 border-t">
-                                            <span className="text-gray-700 font-medium">Balance:</span>
-                                            <span className={`font-bold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                                ₹{balance}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => {
-                                                setSelectedCustomer(customer);
-                                                setTransactionType('borrow');
-                                                setShowTransactionModal(true);
-                                            }}
-                                            className="flex-1 bg-red-100 text-red-700 py-2 rounded-lg hover:bg-red-200 text-sm font-medium"
-                                        >
-                                            Borrow
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                setSelectedCustomer(customer);
-                                                setTransactionType('repay');
-                                                setShowTransactionModal(true);
-                                            }}
-                                            className="flex-1 bg-green-100 text-green-700 py-2 rounded-lg hover:bg-green-200 text-sm font-medium"
-                                        >
-                                            Repay
-                                        </button>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    {showAddModal && <CustomerForm onClose={() => setShowAddModal(false)} />}
-                    {showTransactionModal && selectedCustomer && (
-                        <TransactionModal 
-                            customer={selectedCustomer} 
-                            onClose={() => {
-                                setShowTransactionModal(false);
-                                setSelectedCustomer(null);
-                            }} 
-                        />
-                    )}
-                </div>
-            );
-        }
-
-        // Analytics Component
-        function Analytics({ products, customers, transactions }) {
-            const totalRevenue = 45320;
-            const monthlyGrowth = 12.5;
-            const outstandingDebt = customers.reduce((sum, c) => sum + (c.total_borrowed - c.total_repaid), 0);
-            
-            return (
-                <div className="space-y-6">
-                    <h2 className="text-2xl font-bold text-gray-800">Reports & Analytics</h2>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="bg-white rounded-xl p-6 shadow-lg">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-semibold text-gray-700">Total Revenue</h3>
-                                <i className="fas fa-chart-line text-2xl text-blue-600"></i>
-                            </div>
-                            <p className="text-3xl font-bold text-gray-800">₹{totalRevenue}</p>
-                            <p className="text-sm text-green-600 mt-2">+{monthlyGrowth}% this month</p>
-                        </div>
-
-                        <div className="bg-white rounded-xl p-6 shadow-lg">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-semibold text-gray-700">Outstanding Debt</h3>
-                                <i className="fas fa-exclamation-circle text-2xl text-red-600"></i>
-                            </div>
-                            <p className="text-3xl font-bold text-gray-800">₹{outstandingDebt}</p>
-                            <p className="text-sm text-gray-600 mt-2">{customers.filter(c => c.total_borrowed > c.total_repaid).length} customers</p>
-                        </div>
-
-                        <div className="bg-white rounded-xl p-6 shadow-lg">
-                            <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-semibold text-gray-700">Total Products</h3>
-                                <i className="fas fa-boxes text-2xl text-green-600"></i>
-                            </div>
-                            <p className="text-3xl font-bold text-gray-800">{products.length}</p>
-                            <p className="text-sm text-gray-600 mt-2">{products.filter(p => p.stock > p.low_stock_threshold).length} in stock</p>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div className="bg-white rounded-xl p-6 shadow-lg">
-                            <h3 className="text-lg font-bold text-gray-800 mb-4">Top Customers by Debt</h3>
-                            <div className="space-y-3">
-                                {customers
-                                    .filter(c => c.total_borrowed > c.total_repaid)
-                                    .sort((a, b) => (b.total_borrowed - b.total_repaid) - (a.total_borrowed - a.total_repaid))
-                                    .slice(0, 5)
-                                    .map(customer => (
-                                        <div key={customer.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                            <div>
-                                                <p className="font-semibold text-gray-800">{customer.name}</p>
-                                                <p className="text-sm text-gray-600">{customer.phone}</p>
-                                            </div>
-                                            <span className="text-red-600 font-bold">
-                                                ₹{customer.total_borrowed - customer.total_repaid}
-                                            </span>
-                                        </div>
-                                    ))}
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-xl p-6 shadow-lg">
-                            <h3 className="text-lg font-bold text-gray-800 mb-4">Product Categories</h3>
-                            <div className="space-y-3">
-                                {[...new Set(products.map(p => p.category))].map(category => {
-                                    const categoryProducts = products.filter(p => p.category === category);
-                                    const percentage = (categoryProducts.length / products.length * 100).toFixed(1);
-                                    return (
-                                        <div key={category}>
-                                            <div className="flex items-center justify-between mb-1">
-                                                <span className="text-sm font-medium text-gray-700">{category}</span>
-                                                <span className="text-sm text-gray-600">{categoryProducts.length} items</span>
-                                            </div>
-                                            <div className="w-full bg-gray-200 rounded-full h-2">
-                                                <div
-                                                    className="bg-blue-600 h-2 rounded-full"
-                                                    style={{ width: `${percentage}%` }}
-                                                ></div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        // Main App Component
-        function App() {
-            const [user, setUser] = useState(null);
-            const [activeTab, setActiveTab] = useState('dashboard');
-
-            if (!user) {
-                return <Login onLogin={setUser} />;
+# Authentication APIs
+@app.route('/api/auth/login', methods=['POST', 'OPTIONS'])
+def login():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+    
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT * FROM users WHERE username = %s', (username,))
+    user = c.fetchone()
+    conn.close()
+    
+    if user and check_password_hash(user['password'], password):
+        session.permanent = True  # Make session permanent
+        session['user_id'] = user['id']
+        session['role'] = user['role']
+        session['username'] = user['username']
+        
+        return jsonify({
+            'success': True,
+            'user': {
+                'id': user['id'],
+                'username': user['username'],
+                'role': user['role'],
+                'name': user['name']
             }
+        })
+    
+    return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
 
-            return (
-                <div className="min-h-screen bg-gray-100">
-                    {/* Header */}
-                    <header className="bg-white shadow-md">
-                        <div className="max-w-7xl mx-auto px-4 py-4">
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <i className="fas fa-store text-3xl text-blue-600"></i>
-                                    <div>
-                                        <h1 className="text-2xl font-bold text-gray-800">Grocery Store</h1>
-                                        <p className="text-sm text-gray-600">Management System</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <div className="text-right">
-                                        <p className="font-semibold text-gray-800">{user.name}</p>
-                                        <p className="text-sm text-gray-600 capitalize">{user.role}</p>
-                                    </div>
-                                    <button
-                                        onClick={() => setUser(null)}
-                                        className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2"
-                                    >
-                                        <i className="fas fa-sign-out-alt"></i> Logout
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </header>
+@app.route('/api/auth/logout', methods=['POST', 'OPTIONS'])
+def logout():
+    if request.method == 'OPTIONS':
+        return '', 204
+    session.clear()
+    return jsonify({'success': True})
 
-                    {/* Navigation */}
-                    <nav className="bg-white border-b">
-                        <div className="max-w-7xl mx-auto px-4">
-                            <div className="flex gap-1">
-                                <button
-                                    onClick={() => setActiveTab('dashboard')}
-                                    className={`px-6 py-3 font-medium transition ${
-                                        activeTab === 'dashboard'
-                                            ? 'border-b-2 border-blue-600 text-blue-600'
-                                            : 'text-gray-600 hover:text-gray-800'
-                                    }`}
-                                >
-                                    <i className="fas fa-home mr-2"></i> Dashboard
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('products')}
-                                    className={`px-6 py-3 font-medium transition ${
-                                        activeTab === 'products'
-                                            ? 'border-b-2 border-blue-600 text-blue-600'
-                                            : 'text-gray-600 hover:text-gray-800'
-                                    }`}
-                                >
-                                    <i className="fas fa-box mr-2"></i> Products
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('customers')}
-                                    className={`px-6 py-3 font-medium transition ${
-                                        activeTab === 'customers'
-                                            ? 'border-b-2 border-blue-600 text-blue-600'
-                                            : 'text-gray-600 hover:text-gray-800'
-                                    }`}
-                                >
-                                    <i className="fas fa-users mr-2"></i> Customers
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('analytics')}
-                                    className={`px-6 py-3 font-medium transition ${
-                                        activeTab === 'analytics'
-                                            ? 'border-b-2 border-blue-600 text-blue-600'
-                                            : 'text-gray-600 hover:text-gray-800'
-                                    }`}
-                                >
-                                    <i className="fas fa-chart-bar mr-2"></i> Analytics
-                                </button>
-                            </div>
-                        </div>
-                    </nav>
+@app.route('/api/auth/session', methods=['GET', 'OPTIONS'])
+def check_session():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    if 'user_id' in session:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('SELECT id, username, role, name FROM users WHERE id = %s', (session['user_id'],))
+        user = c.fetchone()
+        conn.close()
+        
+        if user:
+            return jsonify({
+                'authenticated': True,
+                'user': dict(user)
+            })
+    
+    return jsonify({'authenticated': False}), 401
 
-                    {/* Main Content */}
-                    <main className="max-w-7xl mx-auto px-4 py-8">
-                        {activeTab === 'dashboard' && (
-                            <Dashboard 
-                                products={mockData.products} 
-                                customers={mockData.customers}
-                                transactions={mockData.transactions}
-                            />
-                        )}
-                        {activeTab === 'products' && <Products user={user} />}
-                        {activeTab === 'customers' && <Customers />}
-                        {activeTab === 'analytics' && (
-                            <Analytics 
-                                products={mockData.products}
-                                customers={mockData.customers}
-                                transactions={mockData.transactions}
-                            />
-                        )}
-                    </main>
-                </div>
-            );
-        }
+# Products APIs
+@app.route('/api/products', methods=['GET', 'OPTIONS'])
+def get_products():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    category = request.args.get('category')
+    search = request.args.get('search')
+    
+    conn = get_db()
+    c = conn.cursor()
+    query = 'SELECT * FROM products WHERE 1=1'
+    params = []
+    
+    if category:
+        query += ' AND category = %s'
+        params.append(category)
+    
+    if search:
+        query += ' AND name ILIKE %s'
+        params.append(f'%{search}%')
+    
+    query += ' ORDER BY category, name'
+    c.execute(query, params)
+    products = c.fetchall()
+    conn.close()
+    
+    return jsonify([dict(p) for p in products])
 
-        ReactDOM.render(<App />, document.getElementById('root'));
-    </script>
-</body>
-</html>
+@app.route('/api/products', methods=['POST', 'OPTIONS'])
+def add_product():
+    user = get_current_user()
+    if not user or user['role'] not in ['owner', 'staff']:
+        return jsonify({'error': 'Unauthorized or session expired'}), 403
+    
+        data = request.json
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('''INSERT INTO products (name, category, price, stock, low_stock_threshold, unit)
+                     VALUES (%s, %s, %s, %s, %s, %s) RETURNING id''',
+                  (data['name'], data['category'], data['price'], data['stock'], 
+                   data.get('low_stock_threshold', 20), data.get('unit', 'piece')))
+        product_id = c.fetchone()['id']
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'id': product_id})
+    except Exception as e:
+        print("Error adding product:", e)
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+    
+    data = request.json
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('''INSERT INTO products (name, category, price, stock, low_stock_threshold, unit)
+                 VALUES (%s, %s, %s, %s, %s, %s) RETURNING id''',
+              (data['name'], data['category'], data['price'], data['stock'], 
+               data.get('low_stock_threshold', 20), data.get('unit', 'piece')))
+    product_id = c.fetchone()['id']
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True, 'id': product_id})
+
+@app.route('/api/products/<int:product_id>', methods=['PUT', 'OPTIONS'])
+def update_product(product_id):
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    if session.get('role') not in ['owner', 'staff']:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    data = request.json
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('''UPDATE products SET name=%s, category=%s, price=%s, stock=%s, 
+                    low_stock_threshold=%s, unit=%s WHERE id=%s''',
+                 (data['name'], data['category'], data['price'], data['stock'],
+                  data['low_stock_threshold'], data['unit'], product_id))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True})
+
+@app.route('/api/products/<int:product_id>', methods=['DELETE', 'OPTIONS'])
+def delete_product(product_id):
+    user = get_current_user()
+    if not user or user['role'] != 'owner':
+        return jsonify({'error': 'Unauthorized or session expired'}), 403
+
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('DELETE FROM products WHERE id=%s RETURNING id', (product_id,))
+        deleted = c.fetchone()
+        if deleted:
+            conn.commit()
+            conn.close()
+            return jsonify({'success': True})
+        else:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Product not found'}), 404
+    except Exception as e:
+        print("Error deleting product:", e)
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/products/categories', methods=['GET', 'OPTIONS'])
+def get_categories():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT DISTINCT category FROM products ORDER BY category')
+    categories = c.fetchall()
+    conn.close()
+    return jsonify([c['category'] for c in categories])
+
+@app.route('/api/products/low-stock', methods=['GET', 'OPTIONS'])
+def get_low_stock():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('''SELECT * FROM products 
+                 WHERE stock <= low_stock_threshold 
+                 ORDER BY stock ASC''')
+    products = c.fetchall()
+    conn.close()
+    return jsonify([dict(p) for p in products])
+
+# Customers APIs
+@app.route('/api/customers', methods=['GET', 'OPTIONS'])
+
+def get_current_user():
+    if 'user_id' in session:
+        return {'id': session['user_id'], 'role': session['role']}
+    return None
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT * FROM customers ORDER BY name')
+    customers = c.fetchall()
+    conn.close()
+    return jsonify([dict(c) for c in customers])
+
+@app.route('/api/customers', methods=['POST', 'OPTIONS'])
+def add_customer():
+    user = get_current_user()
+    if not user or user['role'] not in ['owner', 'staff']:
+        return jsonify({'error': 'Unauthorized or session expired'}), 403
+
+    data = request.json
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('''INSERT INTO customers (name, phone, email, address)
+                     VALUES (%s, %s, %s, %s) RETURNING id''',
+                  (data['name'], data['phone'], data.get('email'), data.get('address')))
+        customer_id = c.fetchone()['id']
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True, 'id': customer_id})
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({'success': False, 'error': str(e)}), 400
+    # Delete Customer
+@app.route('/api/customers/<int:customer_id>', methods=['DELETE'])
+def delete_customer(customer_id):
+    user = get_current_user()
+    if not user or user['role'] != 'owner':
+        return jsonify({'error': 'Unauthorized or session expired'}), 403
+
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('DELETE FROM customers WHERE id=%s RETURNING id', (customer_id,))
+        deleted = c.fetchone()
+        if deleted:
+            conn.commit()
+            conn.close()
+            return jsonify({'success': True})
+        else:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Customer not found'}), 404
+    except Exception as e:
+        print("Error deleting customer:", e)
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
+@app.route('/api/customers/<int:customer_id>', methods=['GET', 'OPTIONS'])
+def get_customer(customer_id):
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT * FROM customers WHERE id=%s', (customer_id,))
+    customer = c.fetchone()
+    
+    if not customer:
+        conn.close()
+        return jsonify({'error': 'Customer not found'}), 404
+    
+    c.execute('''SELECT * FROM transactions 
+                 WHERE customer_id=%s 
+                 ORDER BY created_at DESC''', (customer_id,))
+    transactions = c.fetchall()
+    conn.close()
+    
+    return jsonify({
+        'customer': dict(customer),
+        'transactions': [dict(t) for t in transactions]
+    })
+
+# Transactions APIs
+@app.route('/api/transactions/borrow', methods=['POST', 'OPTIONS'])
+def add_borrow():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    data = request.json
+    conn = get_db()
+    c = conn.cursor()
+    
+    try:
+        c.execute('''INSERT INTO transactions (customer_id, transaction_type, amount, description, created_by)
+                     VALUES (%s, 'borrow', %s, %s, %s)''',
+                  (data['customer_id'], data['amount'], data.get('description'), session.get('user_id')))
+        
+        c.execute('''UPDATE customers SET total_borrowed = total_borrowed + %s 
+                     WHERE id = %s''', (data['amount'], data['customer_id']))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+@app.route('/api/transactions/repay', methods=['POST', 'OPTIONS'])
+def add_repayment():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    data = request.json
+    conn = get_db()
+    c = conn.cursor()
+    
+    try:
+        c.execute('''INSERT INTO transactions (customer_id, transaction_type, amount, description, created_by)
+                     VALUES (%s, 'repay', %s, %s, %s)''',
+                  (data['customer_id'], data['amount'], data.get('description'), session.get('user_id')))
+        
+        c.execute('''UPDATE customers SET total_repaid = total_repaid + %s 
+                     WHERE id = %s''', (data['amount'], data['customer_id']))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+# Analytics APIs
+@app.route('/api/analytics/dashboard', methods=['GET', 'OPTIONS'])
+def get_dashboard_analytics():
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    conn = get_db()
+    c = conn.cursor()
+    
+    c.execute('''SELECT COALESCE(SUM(total_amount), 0) as total
+                 FROM sales 
+                 WHERE DATE(created_at) = CURRENT_DATE''')
+    today_sales = c.fetchone()
+    
+    c.execute('''SELECT COALESCE(SUM(total_borrowed - total_repaid), 0) as total
+                 FROM customers''')
+    outstanding = c.fetchone()
+    
+    c.execute('''SELECT COUNT(*) as count
+                 FROM products 
+                 WHERE stock <= low_stock_threshold''')
+    low_stock_count = c.fetchone()
+    
+    c.execute('SELECT COUNT(*) as count FROM customers')
+    customer_count = c.fetchone()
+    
+    c.execute('''SELECT t.*, c.name as customer_name
+                 FROM transactions t
+                 JOIN customers c ON t.customer_id = c.id
+                 ORDER BY t.created_at DESC
+                 LIMIT 10''')
+    recent_transactions = c.fetchall()
+    
+    conn.close()
+    
+    return jsonify({
+        'today_sales': float(today_sales['total']),
+        'outstanding_debt': float(outstanding['total']),
+        'low_stock_count': low_stock_count['count'],
+        'customer_count': customer_count['count'],
+        'recent_transactions': [dict(t) for t in recent_transactions]
+    })
+
+if __name__ == '__main__':
+    if DATABASE_URL:
+        init_db()
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port, debug=False)
